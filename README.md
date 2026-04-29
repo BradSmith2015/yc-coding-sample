@@ -6,12 +6,12 @@ A Claude Code skill that prepares a real coding session transcript for a YC appl
 
 A six-phase pipeline with a user checkpoint between every phase — the skill never auto-completes the full run.
 
-1. **Shortlist.** Surveys `~/.claude/projects/`, ranks recent sessions by size, recency, and substance. Outputs a Markdown table of 6–10 candidates.
+1. **Shortlist.** Surveys `~/.claude/projects/` directly via `find` + `jq` (instructions live in `SKILL.md` so the model can adapt the filter). Ranks recent sessions by size, recency, and substance. Outputs a Markdown table of 6–10 candidates.
 2. **Deep dive.** For 1–3 sessions you pick, an `Explore` subagent reads the JSONL and summarizes the problem, narrative arc, technical substance, AI-collaboration moments, outcome, and weaknesses.
 3. **Independent YC-investor review.** A fresh, un-briefed `general-purpose` subagent reads the JSONL with the rubric in `references/yc-rubric.md` and scores 7 dimensions, gives a composite score, a YC tier verdict, the strongest and weakest signals as verbatim quotes, and two interview questions tied to specific transcript moments.
 4. **Comparative ranking** *(optional)*. Run Phase 3 in parallel across the rest of the shortlist for calibrated scoring.
-5. **Export.** `scripts/jsonl_to_md.py` converts the chosen JSONL to Markdown — system instructions stripped, tool calls inlined, Edits as diffs, tool results in collapsibles.
-6. **Security scan.** `scripts/scan_secrets.sh` sweeps the export for API keys, tokens, connection strings, env values, real emails, IPs, Stripe/Clerk IDs, and PII. Reports blockers vs. minor concerns.
+5. **Export.** `scripts/jsonl_to_md.py` converts the chosen JSONL to Markdown — system instructions stripped, tool calls inlined, Edits as diffs, tool results in collapsibles, secret-shaped tokens redacted at render time.
+6. **Security scan.** `scripts/scan_secrets.py` sweeps the export for API keys, tokens, connection strings, env values, real emails, IPs, Stripe/Clerk IDs, and PII. Reports blockers vs. minor concerns. Exits 3 on blockers, 0 otherwise.
 
 ## Why
 

@@ -36,24 +36,55 @@ If unsure, ask: "Is this for a YC application specifically?" before running.
 
 Goal: surface 6–10 ranked candidate sessions from the user's local Claude Code history.
 
-**Action:**
+There is no script for this — do it inline using `find`, `stat`, `jq`, and `sort`. This phase is intentionally model-driven so you can adapt the filter to the user's situation (e.g., dedupe sessions in the same workspace, exclude reviewer-only sessions, narrow to one product).
 
-```bash
-bash scripts/shortlist.sh
-```
+### Defaults
 
-Defaults: last 30 days, ≥500KB, top 8, every project directory under `~/.claude/projects/`, ranked by file size. Override via `--days N`, `--min-size KB`, `--top N`, `--workspace-glob 'pattern'`, `--rank-by size|recency`.
+| Filter | Default | Why |
+|---|---|---|
+| Recency | last 30 days | recent enough to be honest about current skill |
+| Min size | ≥500 KB | smaller sessions are usually trivial Q&A |
+| Top N | 8 | enough to choose from, few enough to scan |
+| Workspace glob | every dir under `~/.claude/projects/` | broad scan; user can narrow |
+| Rank | size DESC, mtime DESC tiebreaker | within a recency window, size correlates with substance much better than mtime — users open many small churn sessions per day |
 
-**For each candidate**, sample first user message and last assistant text:
+Honor explicit overrides if the user mentions them ("only the last 7 days", "just my Threadline workspaces", "rank by recency").
 
-```bash
-jq -r 'select(.type=="user" and .isMeta != true and (.message.content|type)=="string") | .message.content' <path> | head -n 1
-jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text' <path> | tail -n 5
-```
+### Procedure
 
-Present a Markdown table: rank | path | workspace | date | size | one-line summary.
+1. **Find candidates.** Use a single Bash call. Compute the cutoff with `date` (BSD `date -v-Nd` falls back to GNU `date -d 'N days ago'`) so `find -newermt` gets an ISO date — the natural-language form is rejected by `bfs` and other find variants:
 
-**Stop. Ask the user to pick 1–3 sessions for deep-dive.** Do not proceed without an answer.
+   ```bash
+   CUTOFF=$(date -v-30d +%Y-%m-%d 2>/dev/null || date -d '30 days ago' +%Y-%m-%d)
+   find ~/.claude/projects -type f -name '*.jsonl' -newermt "$CUTOFF" -size +500k -print0 \
+   | while IFS= read -r -d '' f; do
+       size=$(stat -f %z "$f" 2>/dev/null || stat -c %s "$f")
+       mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
+       printf '%s\t%s\t%s\n' "$size" "$mtime" "$f"
+     done \
+   | sort -k1,1nr -k2,2nr | head -8
+   ```
+
+2. **Sample one line per candidate** (first plain-string user message, stripped of `<system_instruction>`-style wrappers). Note the doubled backslashes — jq's regex literals require them when invoked via the shell:
+
+   ```bash
+   jq -rs '
+     def strip_tags: gsub("(?s)<(?<t>[\\w-]+)\\b[^>]*>.*?</\\k<t>>"; "");
+     map(select(.type=="user" and .isMeta != true and (.message.content|type)=="string"))
+     | first | (.message.content // "")
+     | strip_tags | gsub("\\s+"; " ") | ltrimstr(" ") | .[0:100]
+   ' "$path"
+   ```
+
+3. **Render a Markdown table** with columns: Rank, Date, Size, Workspace (the dirname's trailing segment), Path, Opening prompt.
+
+4. **Stop and ask the user to pick 1–3 sessions for deep-dive.** Do not proceed without an answer.
+
+### Edge cases
+
+- **No candidates** — suggest loosening filters: `--days 60`, `--min-size 200`, or a custom workspace glob.
+- **All candidates from the same workspace** — offer to dedupe or to widen the search; one workspace dominating the list often means the user has a tight feedback loop on one product, and you should surface variety.
+- **Brand-new account** — if `~/.claude/projects/` is empty or all sessions are tiny, ask if there's a different machine where they've been working.
 
 ## Phase 2 — Deep dive
 
@@ -132,10 +163,10 @@ The script:
 ## Phase 6 — Security scan
 
 ```bash
-bash scripts/scan_secrets.sh <output-path>
+python3 scripts/scan_secrets.py <output-path>
 ```
 
-Reports findings grouped by category, each with line numbers and ≤30 results. Final verdict line is one of: `BLOCKERS — do not submit`, `MINOR — review before submitting`, `CLEAN — safe to submit`.
+Reports findings grouped by category, each with line numbers and ≤30 results. Final verdict line is one of: `BLOCKERS — do not submit`, `MINOR — review before submitting`, `CLEAN — safe to submit`. Exit code 3 when blockers are found, 0 otherwise.
 
 If `BLOCKERS` or `MINOR` findings present, suggest the anonymization one-liner. Use the portable form (BSD `sed -i ''` and GNU `sed -i` differ — `-i.bak` + cleanup works on both):
 
@@ -147,7 +178,8 @@ Tell the user this is the final step. The file is ready to submit.
 
 ## Defaults to remember
 
-- Workspace glob: every directory under `~/.claude/projects/`. Use `--workspace-glob 'pattern'` to narrow.
 - Output directory: `~/Desktop/`.
 - Rubric weights: judgment 20, AI-collab 20, velocity 20, debugging 15, product taste 15, communication 5, founder-signal 5.
 - Tier thresholds: ≥85 Top 5%, ≥75 Top 10%, ≥60 Top 25%, ≥45 Median, <45 Below bar.
+
+Phase 1 filters live in this file (above). Rubric is in `references/yc-rubric.md`.
