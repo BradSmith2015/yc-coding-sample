@@ -87,9 +87,21 @@ Prompt template:
 
 ## Phase 4 — Comparative ranking *(optional)*
 
-If the shortlist had multiple strong candidates, run Phase 3 against the rest so scoring is calibrated against the same rubric.
+If the shortlist had multiple strong candidates, run Phase 3 against each of them so scoring is calibrated against the same rubric.
 
-**This phase MUST run agents in parallel.** Spawn one `general-purpose` agent per remaining session **in a single tool-call block** (multiple `Agent` invocations in one assistant message). Do not await results between spawns — the calls run concurrently and you receive all results together. Sequential spawns wastes wall-clock time and breaks the calibration story (the agents should not see each other's outputs).
+### How to spawn the agents — read this carefully
+
+**Run them in parallel. In a single tool-call block.**
+
+Concretely: in one assistant message, emit multiple `Agent` tool invocations — one per remaining session — and stop the message. The runtime executes them concurrently; you receive all results together when they finish. **Do not** await one before sending the next. **Do not** call them in series across multiple messages.
+
+Why this matters:
+
+- **Calibration integrity.** The agents must form independent opinions. If they see each other's scores, the second agent anchors on the first and the comparison is meaningless.
+- **Wall-clock time.** Sequential spawns multiply latency by N. A 4-session compare takes ~4 minutes serial vs. ~1 minute parallel.
+- **It's a teaching moment for the user.** This skill exists to surface AI-collaboration craft. Demonstrating the right shape here is part of the value — not a footnote.
+
+If you find yourself reaching for `await` between agent spawns, stop and reconsider — the only reason to serialize agents is when the second's prompt depends on the first's output. That is not the case here.
 
 Present a comparison table: rank | session | composite | tier | strongest signal one-liner.
 

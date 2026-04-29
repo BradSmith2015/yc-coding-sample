@@ -9,8 +9,11 @@ DAYS=30
 MIN_SIZE_KB=500
 TOP=8
 RANK_BY=size  # size | recency — within the recency window, size correlates with substance
-# Default: every project directory under ~/.claude/projects/. Narrow with --workspace-glob.
-WORKSPACE_GLOBS=("${HOME}/.claude/projects/"*)
+# Glob *strings*, not pre-expanded paths. Expansion happens at iteration time
+# below so --workspace-glob can override before any FS lookup occurs. Without
+# this, the array would eagerly expand at assignment time and --workspace-glob
+# would never get a chance to take effect cleanly.
+WORKSPACE_GLOB_STRINGS=("${HOME}/.claude/projects/*")
 CUSTOM_GLOB=""
 
 while [[ $# -gt 0 ]]; do
@@ -31,7 +34,7 @@ case "$RANK_BY" in
 esac
 
 if [[ -n "$CUSTOM_GLOB" ]]; then
-  WORKSPACE_GLOBS=("${HOME}/.claude/projects/${CUSTOM_GLOB}")
+  WORKSPACE_GLOB_STRINGS=("${HOME}/.claude/projects/${CUSTOM_GLOB}")
 fi
 
 if ! command -v jq >/dev/null; then
@@ -49,8 +52,11 @@ CUTOFF_EPOCH=$(days_ago_epoch "$DAYS")
 MIN_SIZE_BYTES=$(( MIN_SIZE_KB * 1024 ))
 
 candidates=()
-for pattern in "${WORKSPACE_GLOBS[@]}"; do
-  for dir in $pattern; do  # unquoted to glob-expand
+for pattern in "${WORKSPACE_GLOB_STRINGS[@]}"; do
+  # Unquoted expansion turns the glob string into matching paths; nullglob
+  # makes a non-matching glob expand to nothing, so the inner loop runs zero
+  # times instead of treating the literal pattern as a path.
+  for dir in $pattern; do
     [[ -d "$dir" ]] || continue
     for jsonl in "$dir"/*.jsonl; do
       [[ -f "$jsonl" ]] || continue

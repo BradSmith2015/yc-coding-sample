@@ -36,6 +36,38 @@ LOCAL_CMD_OUT_RE = re.compile(r"<local-command-stdout>(.*?)</local-command-stdou
 # Defends against unknown future tools that might accept secret-shaped inputs.
 REDACT_KEY_RE = re.compile(r"(?i)(secret|token|password|authorization|api[-_]?key|credential)")
 
+# Defense-in-depth: the export script runs before scan_secrets.sh and may show
+# rendered output in places (terminals, IDE preview) before the scan happens.
+# Redact known-shaped tokens inside Bash commands, Write content, and Edit
+# bodies at render time. Patterns mirror the blockers in scan_secrets.sh.
+TEXT_SECRET_PATTERNS = [
+    (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "<redacted-openai-or-anthropic-key>"),
+    (re.compile(r"(?:pk|sk)_(?:live|test)_[a-zA-Z0-9]{20,}"), "<redacted-stripe-key>"),
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "<redacted-aws-key>"),
+    (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "<redacted-github-token>"),
+    (re.compile(r"github_pat_[a-zA-Z0-9_]{80,}"), "<redacted-github-token>"),
+    (re.compile(r"xox[bpoa]-[0-9]{10,}-[a-zA-Z0-9-]+"), "<redacted-slack-token>"),
+    (re.compile(r"AIza[0-9A-Za-z_-]{35}"), "<redacted-google-key>"),
+    (re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"), "<redacted-jwt>"),
+    (
+        re.compile(r"(postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://([^/\s:]+):([^@\s]+)@"),
+        r"\1://\2:<redacted-password>@",
+    ),
+    (
+        re.compile(r"((?:SECRET|API_KEY|PRIVATE_KEY|PASSWORD|TOKEN|CREDENTIAL)\s*=\s*)([A-Za-z0-9_/+=\-]{16,})"),
+        r"\1<redacted>",
+    ),
+]
+
+
+def redact_secrets_in_text(text: str) -> str:
+    """Redact known-shaped tokens inside a free-form string."""
+    if not text:
+        return text
+    for pattern, replacement in TEXT_SECRET_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
 
 def clean_user_text(text: str) -> str:
     text = WRAPPER_BLOCK_RE.sub("", text)
@@ -73,7 +105,7 @@ def redact(value):
 
 
 def _fmt_bash(_name, inp):
-    cmd = inp.get("command", "")
+    cmd = redact_secrets_in_text(inp.get("command", ""))
     desc = inp.get("description", "")
     header = "**Bash**" + (f" — {desc}" if desc else "")
     return f"{header}\n```bash\n{truncate(cmd, MAX_BASH_CMD)}\n```"
@@ -89,8 +121,8 @@ def _fmt_read(_name, inp):
 
 def _fmt_edit(_name, inp):
     path = inp.get("file_path", "")
-    old = truncate(inp.get("old_string", ""), MAX_EDIT_SIDE)
-    new = truncate(inp.get("new_string", ""), MAX_EDIT_SIDE)
+    old = truncate(redact_secrets_in_text(inp.get("old_string", "")), MAX_EDIT_SIDE)
+    new = truncate(redact_secrets_in_text(inp.get("new_string", "")), MAX_EDIT_SIDE)
     old_lines = "\n".join(f"- {line}" for line in old.split("\n"))
     new_lines = "\n".join(f"+ {line}" for line in new.split("\n"))
     return f"**Edit** `{path}`\n```diff\n{old_lines}\n{new_lines}\n```"
@@ -98,7 +130,7 @@ def _fmt_edit(_name, inp):
 
 def _fmt_write(_name, inp):
     path = inp.get("file_path", "")
-    content = inp.get("content", "")
+    content = redact_secrets_in_text(inp.get("content", ""))
     return f"**Write** `{path}`\n```\n{truncate(content, MAX_WRITE)}\n```"
 
 
@@ -118,7 +150,7 @@ def _fmt_agent(_name, inp):
 
 
 def _fmt_task(name, inp):
-    return f"**{name}** ```{json.dumps(inp, indent=2)[:800]}```"
+    return f"**{name}**\n```json\n{json.dumps(inp, indent=2)[:800]}\n```"
 
 
 def _fmt_todowrite(_name, inp):

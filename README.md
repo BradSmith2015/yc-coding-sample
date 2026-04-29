@@ -25,9 +25,18 @@ Surfacing the right Claude Code session out of dozens or hundreds of workspaces 
 npx skills add BradSmith2015/yc-coding-sample -g -y
 ```
 
-`-g` installs globally to `~/.claude/skills/`, `-y` skips confirmation prompts. The CLI clones the repo, finds the `SKILL.md` under `skills/yc-coding-sample/`, and symlinks it into your skills directory.
+`-g` installs globally to `~/.claude/skills/`. `-y` skips confirmation prompts. The CLI clones the repo, finds the `SKILL.md` under `skills/yc-coding-sample/`, and symlinks the skill into the directories of every supported agent it detects on your machine (Claude Code, Cursor, Codex, etc.).
 
-### Symlink (for local development / hacking on the skill)
+After install, confirm it landed:
+
+```bash
+npx skills list
+# → expect to see: yc-coding-sample (~/.claude/skills/yc-coding-sample)
+```
+
+Then in Claude Code, run `/reload-plugins` and `/yc-coding-sample` to invoke.
+
+### Symlink (for hacking on the skill itself)
 
 ```bash
 git clone https://github.com/BradSmith2015/yc-coding-sample ~/code/yc-coding-sample
@@ -39,8 +48,6 @@ ln -s ~/code/yc-coding-sample/skills/yc-coding-sample ~/.claude/skills/yc-coding
 ```bash
 cp -r ~/code/yc-coding-sample/skills/yc-coding-sample ~/.claude/skills/
 ```
-
-After any install, run `/reload-plugins` in Claude Code so the skill is loaded.
 
 ## Usage
 
@@ -58,17 +65,9 @@ or
 
 ## Configuration
 
-`scripts/shortlist.sh` accepts:
+The phased pipeline, every flag, and the script-by-script behavior live in [`skills/yc-coding-sample/SKILL.md`](skills/yc-coding-sample/SKILL.md). Read it once before customizing.
 
-- `--days N` — only consider sessions modified in the last N days (default: 30)
-- `--min-size KB` — minimum file size in KB (default: 500)
-- `--top N` — how many candidates to surface (default: 8)
-- `--workspace-glob 'pattern'` — narrow the search to a glob pattern under `~/.claude/projects/` (default: scan every project directory)
-- `--rank-by size|recency` — sort the shortlist by file size (default — better proxy for substance) or by mtime
-
-## Customizing the rubric
-
-Edit `yc-coding-sample/references/yc-rubric.md` to retune dimension weights or tier thresholds. Defaults: judgment 20, AI-collab 20, velocity 20, debugging 15, product taste 15, communication 5, founder-signal 5. Tier thresholds: ≥85 Top 5%, ≥75 Top 10%, ≥60 Top 25%, ≥45 Median, <45 Below bar.
+To retune the YC-investor scoring (dimension weights, tier thresholds, output format), edit [`skills/yc-coding-sample/references/yc-rubric.md`](skills/yc-coding-sample/references/yc-rubric.md) — the file is loaded verbatim into the reviewer agent's prompt.
 
 ## Out of scope
 
