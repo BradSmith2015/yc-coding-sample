@@ -98,31 +98,54 @@ Aggregate into a comparative summary if multiple sessions.
 
 **Stop. Ask the user to confirm the lead candidate.**
 
-## Phase 3 — Independent YC-investor review
+## Phase 3 — Export, then independent YC-investor review
 
-Spawn a fresh `general-purpose` agent — **no prior briefing, no opinions from earlier in this conversation**. The agent must form its opinion from the file alone.
+The reviewer scores the **rendered Markdown export**, not the raw JSONL. This:
+
+- Removes system blocks, sidechain noise, and most of the wrappers the agent would otherwise have to filter through.
+- Redacts known-shaped secrets at render time.
+- Gives the reviewer stable line numbers to cite (`L<n>`).
+- Keeps the reviewer on `Read` only — no `git`, no `jq`, no `bash`. **This is the main reason the user stops seeing permission prompts.**
+
+### 3a. Export first
+
+Run the export script for the lead candidate (and each session you'll review in Phase 4):
+
+```bash
+python3 scripts/jsonl_to_md.py <jsonl-path> <output-path>
+```
+
+Default output path: `~/Desktop/yc-<workspace>-session.md`. If the user hasn't picked a lead yet and you're going straight to Phase 4, export each shortlisted session.
+
+### 3b. Spawn the reviewer
+
+Spawn a fresh `Explore` agent — **no prior briefing, no opinions from earlier in this conversation**. `Explore` is read-only (no Bash, no Edit, no Agent), which is the point: the reviewer must form its opinion from the export file alone and physically cannot wander into the repo or git history.
 
 Prompt template:
 
 > You are role-playing as a YC partner reviewing a coding session transcript that a founder has submitted as evidence of their technical chops. Be honest, specific, and slightly skeptical — YC partners are pattern-matchers who've seen thousands of founders, not cheerleaders.
 >
-> The artifact: `<absolute path>` — JSONL Claude Code session log. Founder is `<name>`. Project is `<one-line project description>`.
+> The artifact: `<absolute path to .md export>` — a rendered Markdown export of a Claude Code session. Founder is `<name>`. Project is `<one-line project description>`.
+>
+> **Read the file with the `Read` tool only.** Do not run any other tool. Do not look at git history, the working repo, or anything outside this file. The export is the entire evidence base. If something isn't in the file, you cannot claim it.
+>
+> Read enough of the file to score honestly: open it, sample beginning / middle / end with offset+limit, and re-read passages you intend to quote so the line numbers are correct.
 >
 > You have not been briefed by anyone else. Form your own opinion from the file.
 >
 > [Insert the rubric from `references/yc-rubric.md` verbatim here.]
 >
-> Length: ~700–900 words. Specific quotes beat generic praise. Direct, slightly skeptical. No fluff intro/outro.
+> Every quote in your output must include the line number from the export, in the form `(L<n>)` or `(L<start>–L<end>)`. Quotes without line numbers don't count and you should re-read to find them. Length: ~700–900 words. Direct, slightly skeptical. No fluff intro/outro.
 
 **Stop. Confirm the review with the user.**
 
 ## Phase 4 — Comparative ranking *(optional)*
 
-If the shortlist had multiple strong candidates, run Phase 3 against each of them so scoring is calibrated against the same rubric.
+If the shortlist had multiple strong candidates, run Phase 3 against each of them so scoring is calibrated against the same rubric. Each session must already be exported to Markdown (see Phase 3a) — the reviewers only see the `.md` files.
 
 ### How to spawn the agents — read this carefully
 
-**Run them in parallel. In a single tool-call block.**
+**Run them in parallel. In a single tool-call block. Each agent is `Explore` (read-only), pointed at one `.md` export.**
 
 Concretely: in one assistant message, emit multiple `Agent` tool invocations — one per remaining session — and stop the message. The runtime executes them concurrently; you receive all results together when they finish. **Do not** await one before sending the next. **Do not** call them in series across multiple messages.
 
@@ -138,9 +161,9 @@ Present a comparison table: rank | session | composite | tier | strongest signal
 
 **Stop. Ask whether to proceed with the originally chosen lead or switch.**
 
-## Phase 5 — Export
+## Phase 5 — Final export inspection
 
-Convert the chosen JSONL to readable Markdown:
+The export already exists from Phase 3a. If the user picked a different lead in Phase 4 than was originally exported, re-run the export for the new lead, optionally with `--title`:
 
 ```bash
 python3 scripts/jsonl_to_md.py <jsonl-path> <output-path> [--title "Custom Session Title"]

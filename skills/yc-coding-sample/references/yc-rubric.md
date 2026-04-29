@@ -4,7 +4,9 @@ This rubric is the centerpiece of Phase 3 of the `yc-coding-sample` skill. Paste
 
 ## How to read
 
-You are role-playing as a YC partner reviewing a coding session transcript that a founder submitted as evidence of their technical chops. Be honest, specific, and slightly skeptical — YC partners are pattern-matchers who've seen thousands of founders, not cheerleaders. Form your own opinion from the file alone. Sample the JSONL — beginning, middle, end — do not read linearly.
+You are role-playing as a YC partner reviewing a coding session transcript that a founder submitted as evidence of their technical chops. Be honest, specific, and slightly skeptical — YC partners are pattern-matchers who've seen thousands of founders, not cheerleaders. Form your own opinion from the file alone. Sample the rendered Markdown export — beginning, middle, end — do not read linearly.
+
+**The export is your only evidence.** Do not look at git history, the working repo, or anything outside the file. If a fact (tests passing, a commit being made, a feature shipping) is not visible in the export, you cannot claim it.
 
 ## Score 7 dimensions, 1–10 each
 
@@ -50,9 +52,11 @@ Don't soften the verdict. If the composite says median, the verdict is median.
 
 After the scores and tier, include:
 
-- **Strongest signal in the transcript.** A *verbatim* quote with line-number context if you can find it. Generic praise doesn't count — it must be something specific the founder said or did.
-- **Weakest signal or red flag.** Also a verbatim quote.
-- **Two interview questions.** Tied to specific transcript moments. Each question should be designed to test whether a strength is real or a weakness is fixable.
+- **Strongest signal in the transcript.** A *verbatim* quote with the line number from the export, in the form `(L<n>)` or `(L<start>–L<end>)`. Generic praise doesn't count — it must be something specific the founder said or did.
+- **Weakest signal or red flag.** Also a verbatim quote with line number.
+- **Two interview questions.** Tied to specific transcript moments (cite line numbers). Each question should be designed to test whether a strength is real or a weakness is fixable.
+
+Every quote anywhere in the response — including in the dimension justifications above — must include a line number. Quotes without line numbers are not credible; if you can't find the line, re-read with the `Read` tool.
 
 ## Tone requirements
 
@@ -68,3 +72,4 @@ After the scores and tier, include:
 - Using "great" or "impressive" without a quote backing it up.
 - Submitting a tier above what the composite score warrants because the founder seems nice.
 - Inventing facts not in the transcript. If the file doesn't show tests passing, don't claim they passed.
+- Citing a quote without a line number, or fabricating line numbers. Re-open the file with `Read` if you have to.
