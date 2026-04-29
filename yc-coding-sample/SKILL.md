@@ -1,0 +1,132 @@
+---
+name: yc-coding-sample
+description: Find, score, and package your strongest Claude Code session as a YC-application coding sample. Walks through a 6-phase pipeline with a user checkpoint between every phase — shortlist candidates from ~/.claude/projects, deep-dive top picks, independent YC-investor scoring, comparative ranking, Markdown export, and security scan. Use when the user mentions YC (Y Combinator) and any of: a coding sample, a coding session, a transcript, a Claude Code session, or "best work". Also triggers on /yc-coding-sample. Do NOT auto-trigger on generic portfolio talk, interview prep, or code review when YC is not mentioned.
+license: MIT
+metadata:
+  version: "0.1.0"
+---
+
+# yc-coding-sample
+
+Six-phase pipeline. **Stop and wait for user confirmation between every phase.** Never auto-complete the full run.
+
+The skill directory is the directory containing this `SKILL.md`. All script paths below are relative to that directory.
+
+## When NOT to trigger
+
+Skip this skill if the user is:
+
+- Asking a generic portfolio / interview-prep question without mentioning YC.
+- Asking how to export *the current* session (use Claude Code's `/export` instead).
+- Asking for a generic code review of a session (use a code-review skill instead).
+- Asking how to find a file in `~/.claude/projects/` for any other purpose.
+
+If unsure, ask: "Is this for a YC application specifically?" before running.
+
+## Phase 1 — Shortlist
+
+Goal: surface 6–10 ranked candidate sessions from the user's local Claude Code history.
+
+**Action:**
+
+```bash
+bash scripts/shortlist.sh
+```
+
+Defaults: last 30 days, ≥500KB, top 8, every project directory under `~/.claude/projects/`, ranked by file size. Override via `--days N`, `--min-size KB`, `--top N`, `--workspace-glob 'pattern'`, `--rank-by size|recency`.
+
+**For each candidate**, sample first user message and last assistant text:
+
+```bash
+jq -r 'select(.type=="user" and .isMeta != true and (.message.content|type)=="string") | .message.content' <path> | head -n 1
+jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text' <path> | tail -n 5
+```
+
+Present a Markdown table: rank | path | workspace | date | size | one-line summary.
+
+**Stop. Ask the user to pick 1–3 sessions for deep-dive.** Do not proceed without an answer.
+
+## Phase 2 — Deep dive
+
+For each chosen session, spawn an `Explore` agent (parallel if multiple). Use this prompt template:
+
+> Read the JSONL session log at `<absolute path>`. The user is preparing this for a YC application and wants both AI-collaboration and software-engineering signals surfaced. Sample beginning, middle, and end — do not read linearly. Use `jq` to filter user messages, assistant text, and tool-use stats.
+>
+> Report under 600 words covering: (1) opening problem statement (quote first user message); (2) narrative arc — exploration → design → implementation → debugging → verification; (3) technical substance — specific files, components, libraries, 3–5 representative changes; (4) AI collaboration highlights — subagent use, parallel calls, course corrections, quality of specs; (5) engineering quality signals — tests, commits, debugging discipline; (6) final outcome — last meaningful state, commit hash, "tests pass" message; (7) length stats; (8) 2–3 standout moments with verbatim quotes; (9) weaknesses or dead ends.
+
+Aggregate into a comparative summary if multiple sessions.
+
+**Stop. Ask the user to confirm the lead candidate.**
+
+## Phase 3 — Independent YC-investor review
+
+Spawn a fresh `general-purpose` agent — **no prior briefing, no opinions from earlier in this conversation**. The agent must form its opinion from the file alone.
+
+Prompt template:
+
+> You are role-playing as a YC partner reviewing a coding session transcript that a founder has submitted as evidence of their technical chops. Be honest, specific, and slightly skeptical — YC partners are pattern-matchers who've seen thousands of founders, not cheerleaders.
+>
+> The artifact: `<absolute path>` — JSONL Claude Code session log. Founder is `<name>`. Project is `<one-line project description>`.
+>
+> You have not been briefed by anyone else. Form your own opinion from the file.
+>
+> [Insert the rubric from `references/yc-rubric.md` verbatim here.]
+>
+> Length: ~700–900 words. Specific quotes beat generic praise. Direct, slightly skeptical. No fluff intro/outro.
+
+**Stop. Confirm the review with the user.**
+
+## Phase 4 — Comparative ranking *(optional)*
+
+If the shortlist had multiple strong candidates, run Phase 3 against the rest so scoring is calibrated against the same rubric.
+
+**This phase MUST run agents in parallel.** Spawn one `general-purpose` agent per remaining session **in a single tool-call block** (multiple `Agent` invocations in one assistant message). Do not await results between spawns — the calls run concurrently and you receive all results together. Sequential spawns wastes wall-clock time and breaks the calibration story (the agents should not see each other's outputs).
+
+Present a comparison table: rank | session | composite | tier | strongest signal one-liner.
+
+**Stop. Ask whether to proceed with the originally chosen lead or switch.**
+
+## Phase 5 — Export
+
+Convert the chosen JSONL to readable Markdown:
+
+```bash
+python3 scripts/jsonl_to_md.py <jsonl-path> <output-path> [--title "Custom Session Title"]
+```
+
+Default output path: `~/Desktop/yc-<workspace>-session.md` where `<workspace>` is the trailing component of the workspace path (e.g., `dallas`, `baghdad`).
+
+The script:
+
+- Strips `<system_instruction>`, `<system-instruction>`, `<system-reminder>`, and `<local-command-caveat>` blocks from user content.
+- Renders `<command-name>` blocks as inline `` `/command` ``.
+- Renders tool calls per type: `Bash` (description + fenced shell), `Edit` (as diff), `Read` (path + offset/limit), `Write` (path + truncated content), `Grep`/`Glob` (pattern), `Agent` (subagent_type + description + truncated prompt), `TodoWrite` (checkbox list), `TaskCreate`/`TaskUpdate` (compact JSON), generic fallback for others.
+- Renders `thinking` blocks inside `<details>` collapsibles.
+- Renders tool results inside `<details>` collapsibles, truncated to 2500 chars.
+- Skips `system`, `attachment`, `queue-operation`, `last-prompt`, `ai-title` events and sidechain (subagent internal) turns.
+- Header includes title (from `aiTitle` event or `--title` flag), workspace, branch, start/end timestamps, total event count.
+
+**Stop. Ask the user to inspect the file.** Suggest `open <path>`.
+
+## Phase 6 — Security scan
+
+```bash
+bash scripts/scan_secrets.sh <output-path>
+```
+
+Reports findings grouped by category, each with line numbers and ≤30 results. Final verdict line is one of: `BLOCKERS — do not submit`, `MINOR — review before submitting`, `CLEAN — safe to submit`.
+
+If `BLOCKERS` or `MINOR` findings present, suggest the anonymization one-liner. Use the portable form (BSD `sed -i ''` and GNU `sed -i` differ — `-i.bak` + cleanup works on both):
+
+```bash
+sed -i.bak 's|/Users/<actual-username>|/Users/founder|g' <output-path> && rm <output-path>.bak
+```
+
+Tell the user this is the final step. The file is ready to submit.
+
+## Defaults to remember
+
+- Workspace glob: every directory under `~/.claude/projects/`. Use `--workspace-glob 'pattern'` to narrow.
+- Output directory: `~/Desktop/`.
+- Rubric weights: judgment 20, AI-collab 20, velocity 20, debugging 15, product taste 15, communication 5, founder-signal 5.
+- Tier thresholds: ≥85 Top 5%, ≥75 Top 10%, ≥60 Top 25%, ≥45 Median, <45 Below bar.
