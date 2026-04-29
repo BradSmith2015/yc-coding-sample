@@ -19,26 +19,28 @@ Surfacing the right Claude Code session out of dozens or hundreds of workspaces 
 
 ## Install
 
-### Symlink (recommended for local development)
+### Via `npx skills` (recommended)
 
 ```bash
-git clone https://github.com/<owner>/yc-coding-sample ~/code/yc-coding-sample
-ln -s ~/code/yc-coding-sample/yc-coding-sample ~/.claude/skills/yc-coding-sample
+npx skills add BradSmith2015/yc-coding-sample -g -y
+```
+
+`-g` installs globally to `~/.claude/skills/`, `-y` skips confirmation prompts. The CLI clones the repo, finds the `SKILL.md` under `skills/yc-coding-sample/`, and symlinks it into your skills directory.
+
+### Symlink (for local development / hacking on the skill)
+
+```bash
+git clone https://github.com/BradSmith2015/yc-coding-sample ~/code/yc-coding-sample
+ln -s ~/code/yc-coding-sample/skills/yc-coding-sample ~/.claude/skills/yc-coding-sample
 ```
 
 ### Copy
 
 ```bash
-cp -r ~/code/yc-coding-sample/yc-coding-sample ~/.claude/skills/
+cp -r ~/code/yc-coding-sample/skills/yc-coding-sample ~/.claude/skills/
 ```
 
-### Via `npx skills` (after publishing to GitHub)
-
-```bash
-npx skills add <owner>/yc-coding-sample@yc-coding-sample
-```
-
-After installing, run `/reload-plugins` in Claude Code so the skill is loaded.
+After any install, run `/reload-plugins` in Claude Code so the skill is loaded.
 
 ## Usage
 
