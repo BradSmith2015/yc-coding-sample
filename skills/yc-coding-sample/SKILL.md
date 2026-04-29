@@ -1,6 +1,15 @@
 ---
 name: yc-coding-sample
-description: Find, score, and package your strongest Claude Code session as a YC-application coding sample. Walks through a 6-phase pipeline with a user checkpoint between every phase — shortlist candidates from ~/.claude/projects, deep-dive top picks, independent YC-investor scoring, comparative ranking, Markdown export, and security scan. Use when the user mentions YC (Y Combinator) and any of: a coding sample, a coding session, a transcript, a Claude Code session, or "best work". Also triggers on /yc-coding-sample. Do NOT auto-trigger on generic portfolio talk, interview prep, or code review when YC is not mentioned.
+description: >-
+  Find, score, and package your strongest Claude Code session as a
+  YC-application coding sample. Walks through a 6-phase pipeline with a user
+  checkpoint between every phase — shortlist candidates from ~/.claude/projects,
+  deep-dive top picks, independent YC-investor scoring, comparative ranking,
+  Markdown export, and security scan. Use when the user mentions YC
+  (Y Combinator) alongside a coding sample, a coding session, a transcript,
+  a Claude Code session, or "best work". Also triggers on /yc-coding-sample.
+  Do NOT auto-trigger on generic portfolio talk, interview prep, or code review
+  when YC is not mentioned.
 license: MIT
 metadata:
   version: "0.1.0"
